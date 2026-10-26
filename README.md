@@ -1,4 +1,4 @@
-# SurgeryVitals
+# MouseRespCam
 
 Webcam respiratory-rate monitoring for anaesthetised mice during stereotaxic surgery.
 
