@@ -1,0 +1,58 @@
+# --- Large media: never commit recordings, wherever they live ---
+videos/
+*.mp4
+*.m4v
+*.mov
+*.avi
+*.mkv
+*.wmv
+*.flv
+*.webm
+*.mpg
+*.mpeg
+*.h264
+*.h265
+*.hevc
+*.mjpeg
+*.raw
+
+# --- Data / intermediate arrays ---
+results/
+data/
+*.npy
+*.npz
+*.mat
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+*.parquet
+*.feather
+*.zarr/
+*.tif
+*.tiff
+
+# --- Archives ---
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- OS / editor ---
+.DS_Store
+.vscode/
+.idea/
