@@ -3,8 +3,8 @@
 This document describes how SurgeryVitals estimates the respiratory rate of an anaesthetised mouse
 from an ordinary webcam during stereotaxic surgery. It covers each processing stage and its
 parameters, why each design choice was made (including alternatives we tried and rejected), and
-the prior work the method builds on. Numbers in brackets, e.g. [4], refer to the
-[References](#references).
+the prior work the method builds on. Numbers in brackets, e.g. [4], link to the original
+publication; full citations are in the [References](#references).
 
 All parameter values quoted here are the defaults in `src/surgeryvitals/config.py`.
 
@@ -19,8 +19,8 @@ automatic exposure changes brightness whenever the scene changes.
 
 The signal: under isoflurane, each breath is a short, sharp displacement of the flank or back
 (about 0.2 s), followed by a long pause. Rates in our recordings were 36–100 breaths/min. Typical
-inhalant-anaesthesia ranges reported in the literature are about 40–100 breaths/min [20], and
-institutional guidance targets about 55–100 [21].
+inhalant-anaesthesia ranges reported in the literature are about 40–100 breaths/min [[20](https://doi.org/10.1093/ilar/ilab016)], and
+institutional guidance targets about 55–100 [[21](https://az.research.umich.edu/animalcare/guidelines/guidelines-anesthesia-and-analgesia-mice/)].
 
 Design goals:
 1. **Hands-off.** No markers and no mandatory user input; the user may override the region.
@@ -60,12 +60,12 @@ The surgeon's movements are large but not periodic in that band. Background is s
 mouse's flank is small in amplitude but highly periodic. So the region is defined by
 *periodicity*, not by appearance. This means no detector has to be trained. A related principle,
 finding the respiratory region from the intrinsic properties of respiratory motion, was proposed
-for human video monitoring by Janssen et al. [10].
+for human video monitoring by Janssen et al. [[10](https://doi.org/10.1088/0967-3334/37/1/100)].
 
 **Block motion.** Every second frame (15 Hz), the frame is resized to 480 px wide (`INTER_AREA`;
 exactly ¼ of 1080p, which is ~100× faster than a non-integer ratio). Rows are cropped to a
 multiple of 8, giving a 60×33 grid of 8×8 blocks, each ≈32×32 px at full resolution. Dense
-optical flow [1] (Farnebäck: pyramid scale 0.5, 3 levels, window 9, 3 iterations, poly_n 5,
+optical flow [[1](https://doi.org/10.1007/3-540-45103-X_50)] (Farnebäck: pyramid scale 0.5, 3 levels, window 9, 3 iterations, poly_n 5,
 σ 1.1) is computed between consecutive localiser frames and averaged per block. This gives one
 2-D velocity per block per sample. The flow runs on a worker thread; OpenCV releases the GIL,
 so it overlaps with decoding and the region processing.
@@ -76,11 +76,11 @@ so it overlaps with decoding and the region processing.
 2. Project each block onto its dominant direction, θ = ½·atan2(2c<sub>xy</sub>, c<sub>xx</sub> − c<sub>yy</sub>),
    from the block's 2×2 displacement covariance.
 3. Compute the Hann-windowed power spectrum P(f) and the harmonic sum
-   H(f) = Σ<sub>k=1..3</sub> P(k·f) [11, 12]. The block's rate f₀ is the argmax of H within 30–210 breaths/min.
+   H(f) = Σ<sub>k=1..3</sub> P(k·f) [[11](#references), [12](https://doi.org/10.1121/1.396427)]. The block's rate f₀ is the argmax of H within 30–210 breaths/min.
 4. Score = power within ±0.08 Hz of f₀, 2f₀, 3f₀ divided by total power in 0.1–6 Hz.
 
 The score is a spectral-concentration measure, close in spirit to the SNR used in camera-based
-pulse measurement [14]. Because the denominator includes slow motion (0.1–0.5 Hz), blocks
+pulse measurement [[14](https://doi.org/10.1109/TBME.2013.2266196)]. Because the denominator includes slow motion (0.1–0.5 Hz), blocks
 dominated by the surgeon score low.
 
 **Two pitfalls found on our data, and their fixes:**
@@ -110,10 +110,10 @@ follow the breathing motion and remove exactly the signal we want. The mouse is 
 stereotaxic frame, so we instead register the *rigid scene around it* (ear bars, platform, tape)
 and carry the region along.
 
-- ORB features [2] (up to 1500, FAST threshold 10) on a half-resolution frame. The region itself
+- ORB features [[2](https://doi.org/10.1109/ICCV.2011.6126544)] (up to 1500, FAST threshold 10) on a half-resolution frame. The region itself
   is masked out of the reference.
 - Every 15 frames (0.5 s): match current features to the reference (brute-force Hamming, k = 2,
-  Lowe ratio test 0.8 [4]). Then fit a 4-degree-of-freedom similarity transform with RANSAC [3]
+  Lowe ratio test 0.8 [[4](https://doi.org/10.1023/B:VISI.0000029664.99615.94)]). Then fit a 4-degree-of-freedom similarity transform with RANSAC [[3](https://doi.org/10.1145/358669.358692)]
   (`cv2.estimateAffinePartial2D`, reprojection threshold 4 px). The fit is accepted if it has
   ≥25 inliers and scale in (0.8, 1.25).
 - When the transform updates, the *previous* region patch is re-sampled with the new transform.
@@ -134,12 +134,12 @@ and carry the region along.
 **Region patch.** The bounding box of the tracked region is cropped and area-downsampled by
 s = max(0.25, 24 px / shorter side), then affine-warped to a fixed patch (typically ~70×45 px).
 
-**Motion.** Farnebäck flow [1] between consecutive patches (2 levels, window 9). For each frame
+**Motion.** Farnebäck flow [[1](https://doi.org/10.1007/3-540-45103-X_50)] between consecutive patches (2 levels, window 9). For each frame
 we keep the mean flow vector **v**<sub>t</sub> and the mean flow magnitude m<sub>t</sub>.
 Optical flow was chosen over intensity-based signals because brightness here is dominated by
 auto-exposure (exploration figure 01). In a comparison of three extractors for camera-based
 human respiration, optical flow also outperformed the intensity-based ones in all tested
-conditions [16].
+conditions [[16](https://doi.org/10.3390/s21155126)].
 
 **Artifact rejection.** A frame is an artifact if m<sub>t</sub> > T or the last registration
 failed; the flag is held for 0.5 s. During artifacts **v**<sub>t</sub> is set to zero (they are
@@ -206,7 +206,7 @@ Every second, with ≥8 s of signal:
    P(f) = 0 below 0.9 × 25/60 Hz.
 3. **Harmonic-weighted salience.**
    Λ(f) = H(f) · √(P(f) / max P), where H(f) = Σ<sub>k=1..3</sub> P(k·f).
-   The harmonic sum [11, 12] makes the fundamental of an impulsive waveform win over its
+   The harmonic sum [[11](#references), [12](https://doi.org/10.1121/1.396427)] makes the fundamental of an impulsive waveform win over its
    harmonics. A plain harmonic sum, however, also rewards *sub*-harmonics: the candidate at f₀/3
    collects P(f₀) as its 3rd harmonic. Multiplying by the candidate's own power removes that
    failure, which we observed as false 13/min readings.
@@ -216,7 +216,7 @@ Every second, with ≥8 s of signal:
    (σ = 2 breaths/min per second) plus a 0.2% uniform jump probability, so it can re-lock.
    Emission: (Λ/max Λ)² + 0.02. Forward filtering only (causal); the estimate is the posterior
    mode. Temporal tracking of a spectral peak with an HMM follows pitch trackers such as pYIN
-   [13] and spectral tracking of heart rate from PPG [15].
+   [[13](https://doi.org/10.1109/ICASSP.2014.6853678)] and spectral tracking of heart rate from PPG [[15](https://doi.org/10.1109/TBME.2014.2359372)].
 6. **Confidence.** SQI = spectral concentration at the estimate (±0.1 Hz, 3 harmonics, relative
    to 0.1–6 Hz), compared with the breath-to-breath rate from Stage D:
 
@@ -228,8 +228,8 @@ Every second, with ≥8 s of signal:
    | none | not enough clean data | | |
 
    A rate is **reported only when confidence is good or fair**, i.e. when two independent
-   estimators agree. This is the "smart fusion" principle of Karlen et al. [17] for respiratory
-   rate from PPG; see Charlton et al. [18] for a review of such estimators. The regularity
+   estimators agree. This is the "smart fusion" principle of Karlen et al. [[17](https://doi.org/10.1109/TBME.2013.2246160)] for respiratory
+   rate from PPG; see Charlton et al. [[18](https://doi.org/10.1109/RBME.2017.2763681)] for a review of such estimators. The regularity
    condition stopped two estimators that happened to agree on noise from passing.
    The GUI keeps showing the last valid value, dimmed, for up to 15 s.
 
@@ -272,10 +272,10 @@ that comparison.
 |---|---|---|
 | Frame-difference "motion energy" (∣I<sub>t</sub> − I<sub>t−1</sub>∣) | Peaks at **2×** the rate (inhalation and exhalation both produce energy) | `exploration/01_*` |
 | Mean region intensity | Dominated by webcam auto-exposure steps | `exploration/01_*` |
-| Facemap-style motion SVD / movie SVD [8, 9] | Works on some recordings, but the breathing component changes (0, 2, 6) and the basis must be re-learned after any view change. Movie SVD locked onto half the rate in Recording 1. Dropped to keep the tool hands-off | `exploration/05_*`, `06_*` |
+| Facemap-style motion SVD / movie SVD [[8](https://doi.org/10.1038/s41593-023-01490-6), [9](https://doi.org/10.1126/science.aav7893)] | Works on some recordings, but the breathing component changes (0, 2, 6) and the basis must be re-learned after any view change. Movie SVD locked onto half the rate in Recording 1. Dropped to keep the tool hands-off | `exploration/05_*`, `06_*` |
 | PCA of the dense flow field | Same component-selection problem (half-rate lock in Recording 1) | `exploration/scripts/flowpca.py` |
-| DIS optical flow [6] for localisation | Much cheaper (0.8–2.3 ms), but missed weak breathing (Recording 1 at 200 s) | `exploration/scripts/loc_flow_compare.py` |
-| One-step block Lucas–Kanade [5] | Failed on Recording 1 (blurry, low-texture fur; exposure changes read as motion) | removed after test |
+| DIS optical flow [[6](https://doi.org/10.1007/978-3-319-46493-0_29)] for localisation | Much cheaper (0.8–2.3 ms), but missed weak breathing (Recording 1 at 200 s) | `exploration/scripts/loc_flow_compare.py` |
+| One-step block Lucas–Kanade [[5](https://www.ijcai.org/Proceedings/81-2/Papers/017.pdf)] | Failed on Recording 1 (blurry, low-texture fur; exposure changes read as motion) | removed after test |
 | Tracker locked onto the mouse (e.g. correlation-filter trackers) | Would absorb the breathing motion; replaced by anchor tracking | design reasoning |
 | Plain harmonic sum; rate-dependent peak spacing | Sub-harmonic lock that confirms itself | `exploration/08_*` history |
 
@@ -285,11 +285,11 @@ learned "usable frame / occluded" classifier is a reasonable future addition onc
 
 ## 11. Related work and acknowledgements
 
-- **Camera-based vital signs in rodents.** Kunczik et al. [7] measured respiratory and heart
+- **Camera-based vital signs in rodents.** Kunczik et al. [[7](https://doi.org/10.1364/BOE.10.004422)] measured respiratory and heart
   rate of anaesthetised mice and rats from RGB video, reporting respiratory-rate RMSE of about
   1.4 breaths/min in mice. Respiration was derived from the tracked motion of the abdominal
   area in manually selected regions; the animals were not surrounded by a working surgeon.
-  A later study extended camera-based respiration monitoring to unconstrained rodents [19].
+  A later study extended camera-based respiration monitoring to unconstrained rodents [[19](https://doi.org/10.3390/ani13121901)].
   US patent 10,292,369 ("Non-contact detection of physiological characteristics of
   experimental animals") describes deriving respiration rate of experimental animals from
   an optical-flow signal. Anyone commercialising this tool should review it.
@@ -298,68 +298,74 @@ learned "usable frame / occluded" classifier is a reasonable future addition onc
   surgeon-motion handling (search floor, artifact scale, axis steering) and confidence-gated
   reporting.
 - **Camera-based respiration in humans.** Optical flow outperformed intensity-based extractors
-  (PCA, highest-variance pixels) in Romano et al. [16]. Automatic respiratory region detection from intrinsic motion properties
-  was proposed by Janssen et al. [10].
-- **Signal processing.** Harmonic sum / sub-harmonic summation pitch estimation [11, 12]; HMM
-  pitch tracking [13]; spectral SNR as a quality measure [14]; PPG heart-rate tracking [15];
-  agreement-based fusion of respiratory-rate estimators [17, 18].
-- **Behavioural video analysis.** Facemap's motion SVD [8, 9] informed the exploration phase.
-- **Software.** OpenCV [22] (optical flow, ORB, RANSAC, video I/O), NumPy [23], SciPy [24]
+  (PCA, highest-variance pixels) in Romano et al. [[16](https://doi.org/10.3390/s21155126)]. Automatic respiratory region detection from intrinsic motion properties
+  was proposed by Janssen et al. [[10](https://doi.org/10.1088/0967-3334/37/1/100)].
+- **Signal processing.** Harmonic sum / sub-harmonic summation pitch estimation [[11](#references), [12](https://doi.org/10.1121/1.396427)]; HMM
+  pitch tracking [[13](https://doi.org/10.1109/ICASSP.2014.6853678)]; spectral SNR as a quality measure [[14](https://doi.org/10.1109/TBME.2013.2266196)]; PPG heart-rate tracking [[15](https://doi.org/10.1109/TBME.2014.2359372)];
+  agreement-based fusion of respiratory-rate estimators [[17](https://doi.org/10.1109/TBME.2013.2246160), [18](https://doi.org/10.1109/RBME.2017.2763681)].
+- **Behavioural video analysis.** Facemap's motion SVD [[8](https://doi.org/10.1038/s41593-023-01490-6), [9](https://doi.org/10.1126/science.aav7893)] informed the exploration phase.
+- **Software.** OpenCV [[22](https://web.archive.org/web/20250114082146/https://www.drdobbs.com/open-source/the-opencv-library/184404319)] (optical flow, ORB, RANSAC, video I/O), NumPy [[23](https://doi.org/10.1038/s41586-020-2649-2)], SciPy [[24](https://doi.org/10.1038/s41592-019-0686-2)]
   (filters, peak detection), Qt for Python (PySide6) and pyqtgraph (GUI), matplotlib (figures).
 
 ## References
 
 1. G. Farnebäck, "Two-frame motion estimation based on polynomial expansion," in *Image Analysis
-   (SCIA 2003)*, LNCS 2749, pp. 363–370, Springer, 2003.
+   (SCIA 2003)*, LNCS 2749, pp. 363–370, Springer, 2003. [doi:10.1007/3-540-45103-X_50](https://doi.org/10.1007/3-540-45103-X_50)
 2. E. Rublee, V. Rabaud, K. Konolige, G. Bradski, "ORB: An efficient alternative to SIFT or SURF,"
-   in *Proc. IEEE ICCV*, pp. 2564–2571, 2011.
+   in *Proc. IEEE ICCV*, pp. 2564–2571, 2011. [doi:10.1109/ICCV.2011.6126544](https://doi.org/10.1109/ICCV.2011.6126544)
 3. M. A. Fischler, R. C. Bolles, "Random sample consensus: a paradigm for model fitting with
    applications to image analysis and automated cartography," *Commun. ACM* 24(6):381–395, 1981.
+   [doi:10.1145/358669.358692](https://doi.org/10.1145/358669.358692)
 4. D. G. Lowe, "Distinctive image features from scale-invariant keypoints," *Int. J. Comput.
-   Vision* 60(2):91–110, 2004.
+   Vision* 60(2):91–110, 2004. [doi:10.1023/B:VISI.0000029664.99615.94](https://doi.org/10.1023/B:VISI.0000029664.99615.94)
 5. B. D. Lucas, T. Kanade, "An iterative image registration technique with an application to
-   stereo vision," in *Proc. IJCAI*, pp. 674–679, 1981.
+   stereo vision," in *Proc. IJCAI*, pp. 674–679, 1981. [PDF (IJCAI proceedings)](https://www.ijcai.org/Proceedings/81-2/Papers/017.pdf)
 6. T. Kroeger, R. Timofte, D. Dai, L. Van Gool, "Fast optical flow using dense inverse search,"
-   in *Proc. ECCV*, LNCS 9908, pp. 471–488, 2016.
+   in *Proc. ECCV*, LNCS 9908, pp. 471–488, 2016. [doi:10.1007/978-3-319-46493-0_29](https://doi.org/10.1007/978-3-319-46493-0_29)
 7. J. Kunczik, C. Barbosa Pereira, L. Zieglowski, R. Tolba, L. Wassermann, C. Häger, A. Bleich,
    H. Janssen, T. Thum, M. Czaplik, "Remote vitals monitoring in rodents using video recordings,"
-   *Biomed. Opt. Express* 10(9):4422–4436, 2019. https://doi.org/10.1364/BOE.10.004422
+   *Biomed. Opt. Express* 10(9):4422–4436, 2019. [doi:10.1364/BOE.10.004422](https://doi.org/10.1364/BOE.10.004422)
 8. A. Syeda, L. Zhong, R. Tung, W. Long, M. Pachitariu, C. Stringer, "Facemap: a framework for
    modeling neural activity based on orofacial tracking," *Nat. Neurosci.* 27(1):187–195, 2024.
-   https://doi.org/10.1038/s41593-023-01490-6
+   [doi:10.1038/s41593-023-01490-6](https://doi.org/10.1038/s41593-023-01490-6)
 9. C. Stringer, M. Pachitariu, N. Steinmetz, C. B. Reddy, M. Carandini, K. D. Harris, "Spontaneous
    behaviors drive multidimensional, brainwide activity," *Science* 364(6437):eaav7893, 2019.
+   [doi:10.1126/science.aav7893](https://doi.org/10.1126/science.aav7893)
 10. R. Janssen, W. Wang, A. Moço, G. de Haan, "Video-based respiration monitoring with automatic
     region of interest detection," *Physiol. Meas.* 37(1):100–114, 2016.
-    https://doi.org/10.1088/0967-3334/37/1/100
+    [doi:10.1088/0967-3334/37/1/100](https://doi.org/10.1088/0967-3334/37/1/100)
 11. A. M. Noll, "Pitch determination of human speech by the harmonic product spectrum, the
     harmonic sum spectrum, and a maximum likelihood estimate," in *Proc. Symposium on Computer
     Processing in Communications*, vol. 19, pp. 779–797, Polytechnic Press, Brooklyn, 1970
-    (symposium held 1969).
+    (symposium held 1969). Print only; no online version or DOI exists.
 12. D. J. Hermes, "Measurement of pitch by subharmonic summation," *J. Acoust. Soc. Am.*
-    83(1):257–264, 1988.
+    83(1):257–264, 1988. [doi:10.1121/1.396427](https://doi.org/10.1121/1.396427)
 13. M. Mauch, S. Dixon, "pYIN: A fundamental frequency estimator using probabilistic threshold
-    distributions," in *Proc. IEEE ICASSP*, pp. 659–663, 2014.
+    distributions," in *Proc. IEEE ICASSP*, pp. 659–663, 2014. [doi:10.1109/ICASSP.2014.6853678](https://doi.org/10.1109/ICASSP.2014.6853678)
 14. G. de Haan, V. Jeanne, "Robust pulse rate from chrominance-based rPPG," *IEEE Trans. Biomed.
-    Eng.* 60(10):2878–2886, 2013. https://doi.org/10.1109/TBME.2013.2266196
+    Eng.* 60(10):2878–2886, 2013. [doi:10.1109/TBME.2013.2266196](https://doi.org/10.1109/TBME.2013.2266196)
 15. Z. Zhang, Z. Pi, B. Liu, "TROIKA: A general framework for heart rate monitoring using
     wrist-type photoplethysmographic signals during intensive physical exercise," *IEEE Trans.
-    Biomed. Eng.* 62(2):522–531, 2015.
+    Biomed. Eng.* 62(2):522–531, 2015. [doi:10.1109/TBME.2014.2359372](https://doi.org/10.1109/TBME.2014.2359372)
 16. C. Romano, E. Schena, S. Silvestri, C. Massaroni, "Non-contact respiratory monitoring using an
     RGB camera for real-world applications," *Sensors* 21(15):5126, 2021.
-    https://doi.org/10.3390/s21155126
+    [doi:10.3390/s21155126](https://doi.org/10.3390/s21155126)
 17. W. Karlen, S. Raman, J. M. Ansermino, G. A. Dumont, "Multiparameter respiratory rate
     estimation from the photoplethysmogram," *IEEE Trans. Biomed. Eng.* 60(7):1946–1953, 2013.
+    [doi:10.1109/TBME.2013.2246160](https://doi.org/10.1109/TBME.2013.2246160)
 18. P. H. Charlton, D. A. Birrenkott, T. Bonnici, M. A. F. Pimentel, A. E. W. Johnson, J. Alastruey,
     L. Tarassenko, P. J. Watkinson, R. Beale, D. A. Clifton, "Breathing rate estimation from the
     electrocardiogram and photoplethysmogram: a review," *IEEE Rev. Biomed. Eng.* 11:2–20, 2018.
-19. "Camera-based respiration monitoring of unconstrained rodents," *Animals* 13(12):1901, 2023.
-    https://doi.org/10.3390/ani13121901
+    [doi:10.1109/RBME.2017.2763681](https://doi.org/10.1109/RBME.2017.2763681)
+19. L. Breuer, L. Mösch, J. Kunczik, V. Buchecker, H. Potschka, M. Czaplik, C. Barbosa Pereira,
+    "Camera-based respiration monitoring of unconstrained rodents," *Animals* 13(12):1901, 2023.
+    [doi:10.3390/ani13121901](https://doi.org/10.3390/ani13121901)
 20. K. L. Navarro, M. Huss, J. C. Smith, P. Sharp, J. O. Marx, C. Pacharinsak, "Mouse anesthesia:
-    the art and science," *ILAR J.* 62(1–2):238–273, 2021. https://doi.org/10.1093/ilar/ilab016
+    the art and science," *ILAR J.* 62(1–2):238–273, 2021. [doi:10.1093/ilar/ilab016](https://doi.org/10.1093/ilar/ilab016)
 21. University of Michigan Animal Care & Use Program, "Guidelines on anesthesia and analgesia in
-    mice." https://az.research.umich.edu/animalcare/guidelines/guidelines-anesthesia-and-analgesia-mice/
+    mice." [az.research.umich.edu](https://az.research.umich.edu/animalcare/guidelines/guidelines-anesthesia-and-analgesia-mice/)
 22. G. Bradski, "The OpenCV library," *Dr. Dobb's Journal of Software Tools*, 2000.
-23. C. R. Harris et al., "Array programming with NumPy," *Nature* 585:357–362, 2020.
+    [Archived article](https://web.archive.org/web/20250114082146/https://www.drdobbs.com/open-source/the-opencv-library/184404319)
+23. C. R. Harris et al., "Array programming with NumPy," *Nature* 585:357–362, 2020. [doi:10.1038/s41586-020-2649-2](https://doi.org/10.1038/s41586-020-2649-2)
 24. P. Virtanen et al., "SciPy 1.0: fundamental algorithms for scientific computing in Python,"
-    *Nat. Methods* 17:261–272, 2020.
+    *Nat. Methods* 17:261–272, 2020. [doi:10.1038/s41592-019-0686-2](https://doi.org/10.1038/s41592-019-0686-2)

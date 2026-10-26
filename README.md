@@ -89,10 +89,21 @@ exploration/        analysis figures and scripts from the design phase
 
 ## Acknowledgements
 
-This tool builds on established methods. The main ones are Farnebäck optical flow, ORB features
-with RANSAC, harmonic-sum pitch estimation (Noll; Hermes), HMM pitch tracking (pYIN), and
-agreement-based fusion of respiratory-rate estimates (Karlen et al.). It is related to earlier
-camera-based monitoring of rodents (Kunczik et al. 2019) and automatic respiratory
-region-of-interest detection in humans (Janssen et al. 2016). Facemap's motion SVD (Syeda et al.
-2024) informed the exploration. It is built with OpenCV, NumPy, SciPy, PySide6, pyqtgraph and
-matplotlib. Full citations are in [docs/ALGORITHM.md](docs/ALGORITHM.md#references).
+We thank Deniz Kılınç Bülbül for preparing the surgery recordings that made it possible to develop
+and test the algorithm.
+
+This tool builds on established methods. The main ones are
+[Farnebäck optical flow](https://doi.org/10.1007/3-540-45103-X_50),
+[ORB features](https://doi.org/10.1109/ICCV.2011.6126544) with
+[RANSAC](https://doi.org/10.1145/358669.358692), harmonic-sum pitch estimation (Noll, print only;
+[Hermes](https://doi.org/10.1121/1.396427)), HMM pitch tracking
+([pYIN](https://doi.org/10.1109/ICASSP.2014.6853678)), and agreement-based fusion of
+respiratory-rate estimates ([Karlen et al.](https://doi.org/10.1109/TBME.2013.2246160)). It is
+related to earlier camera-based monitoring of rodents
+([Kunczik et al. 2019](https://doi.org/10.1364/BOE.10.004422)) and automatic respiratory
+region-of-interest detection in humans
+([Janssen et al. 2016](https://doi.org/10.1088/0967-3334/37/1/100)). Facemap's motion SVD
+([Syeda et al. 2024](https://doi.org/10.1038/s41593-023-01490-6)) informed the exploration. It is
+built with OpenCV, [NumPy](https://doi.org/10.1038/s41586-020-2649-2),
+[SciPy](https://doi.org/10.1038/s41592-019-0686-2), PySide6, pyqtgraph and matplotlib. Full
+citations are in [docs/ALGORITHM.md](docs/ALGORITHM.md#references).
