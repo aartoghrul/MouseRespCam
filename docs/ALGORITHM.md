@@ -383,39 +383,7 @@ time for one recording. The dominant cost is whole-frame Farnebäck flow, about 
 There is **no ground truth yet**. What has been checked is internal consistency and visual
 inspection of the waveform (figures in `exploration/`):
 
-| Recording | duration | rate reported | reported vs breath-to-breath (median abs. diff.) | note |
-|---|---|---|---|---|
-| 1 | 227 s | 66 % | 0.4 breaths/min | hands constantly near the mouse |
-| 2 | 611 s | 93 % | 0.6 breaths/min | rate falls 99 → 46 over the session |
-| 3 | 1030 s | 94 %* | 0.4 breaths/min* | |
-| 4 | 1176 s | 90 %* | 0.4 breaths/min* | rate falls 72 → 38 |
-| 5 | 486 s | 79 %* | 0.7 breaths/min* | camera repositioned at ~470 s |
-
-\* from the run before the last two fixes (breathing-axis steering, 25/min floor); not yet re-run.
-
-The spectral and breath-counting estimators share the same waveform, so their agreement is
-**not** an accuracy measure. Accuracy must be established against an independent reference
-(e.g. a piezo/pressure pad or manual annotation); `breaths.csv` and `rate.csv` are written for
-that comparison.
-
-## 10. Alternatives evaluated and rejected
-
-| Approach | Outcome on our footage | Evidence |
-|---|---|---|
-| Frame-difference "motion energy" (∣I<sub>t</sub> − I<sub>t−1</sub>∣) | Peaks at **2×** the rate (inhalation and exhalation both produce energy) | `exploration/01_*` |
-| Mean region intensity | Dominated by webcam auto-exposure steps | `exploration/01_*` |
-| Facemap-style motion SVD / movie SVD [[8](https://doi.org/10.1038/s41593-023-01490-6), [9](https://doi.org/10.1126/science.aav7893)] | Works on some recordings, but the breathing component changes (0, 2, 6) and the basis must be re-learned after any view change. Movie SVD locked onto half the rate in Recording 1. Dropped to keep the tool hands-off | `exploration/05_*`, `06_*` |
-| PCA of the dense flow field | Same component-selection problem (half-rate lock in Recording 1) | `exploration/scripts/flowpca.py` |
-| DIS optical flow [[6](https://doi.org/10.1007/978-3-319-46493-0_29)] for localisation | Much cheaper (0.8–2.3 ms), but missed weak breathing (Recording 1 at 200 s) | `exploration/scripts/loc_flow_compare.py` |
-| One-step block Lucas–Kanade [[5](https://www.ijcai.org/Proceedings/81-2/Papers/017.pdf)] | Failed on Recording 1 (blurry, low-texture fur; exposure changes read as motion) | removed after test |
-| Tracker locked onto the mouse (e.g. correlation-filter trackers) | Would absorb the breathing motion; replaced by anchor tracking | design reasoning |
-| Plain harmonic sum; rate-dependent peak spacing | Sub-harmonic lock that confirms itself | `exploration/08_*` history |
-
-Deep-learning remote-respiration models were not used. They are trained on humans, need
-labelled data we do not have yet, and are much slower than the classical pipeline. A small
-learned "usable frame / occluded" classifier is a reasonable future addition once labels exist.
-
-## 11. Related work and acknowledgements
+## 10. Related work and acknowledgements
 
 - **Camera-based vital signs in rodents.** Kunczik et al. [[7](https://doi.org/10.1364/BOE.10.004422)] measured respiratory and heart
   rate of anaesthetised mice and rats from RGB video, reporting respiratory-rate RMSE of about
