@@ -1,6 +1,6 @@
-# SurgeryVitals — algorithm description
+# MouseRespCam — algorithm description
 
-This document describes how SurgeryVitals estimates the respiratory rate of an anaesthetised mouse
+This document describes how MouseRespCam estimates the respiratory rate of an anaesthetised mouse
 from an ordinary webcam during stereotaxic surgery. It covers each processing stage and its
 parameters, why each design choice was made (including alternatives we tried and rejected), and
 the prior work the method builds on. Numbers in brackets, e.g. [4], link to the original
@@ -393,7 +393,7 @@ inspection of the waveform (figures in `exploration/`):
   US patent 10,292,369 ("Non-contact detection of physiological characteristics of
   experimental animals") describes deriving respiration rate of experimental animals from
   an optical-flow signal. Anyone commercialising this tool should review it.
-  SurgeryVitals' contributions are the combination for the surgical setting: hands-off
+  MouseRespCam' contributions are the combination for the surgical setting: hands-off
   periodicity-based localisation, anchor tracking that does not cancel the breathing signal,
   surgeon-motion handling (search floor, artifact scale, axis steering) and confidence-gated
   reporting. Most importantly, it does not require any specialized hardwire for tracking.
