@@ -396,7 +396,7 @@ inspection of the waveform (figures in `exploration/`):
   SurgeryVitals' contributions are the combination for the surgical setting: hands-off
   periodicity-based localisation, anchor tracking that does not cancel the breathing signal,
   surgeon-motion handling (search floor, artifact scale, axis steering) and confidence-gated
-  reporting.
+  reporting. Most importantly, it does not require any specialized hardwire for tracking.
 - **Camera-based respiration in humans.** Optical flow outperformed intensity-based extractors
   (PCA, highest-variance pixels) in Romano et al. [[16](https://doi.org/10.3390/s21155126)]. Automatic respiratory region detection from intrinsic motion properties
   was proposed by Janssen et al. [[10](https://doi.org/10.1088/0967-3334/37/1/100)].
