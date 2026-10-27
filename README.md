@@ -76,6 +76,7 @@ src/surgeryvitals/
   gui.py        PySide6 / pyqtgraph monitor
   report.py     static summary figure
 docs/ALGORITHM.md   method description and references
+docs/figures/       figures for ALGORITHM.md and make_figures.py, which regenerates them
 exploration/        analysis figures and scripts from the design phase
 ```
 

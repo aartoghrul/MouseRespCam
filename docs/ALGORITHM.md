@@ -8,6 +8,10 @@ publication; full citations are in the [References](#references).
 
 All parameter values quoted here are the defaults in `src/surgeryvitals/config.py`.
 
+The figures and animations come from the recordings. The package's own code produced every
+value they show; nothing is drawn by hand. To regenerate them, run
+`.venv/bin/python docs/figures/make_figures.py all` (it needs the videos in `videos/`).
+
 ---
 
 ## 1. Problem and constraints
@@ -31,27 +35,49 @@ Design goals:
 
 ## 2. Pipeline overview
 
-```
- frame (BGR, t) ──► grayscale
-      │
-      ├─► [A] Localiser: whole-frame block motion → periodicity map → candidate region
-      │          (every 2nd frame; proposal every 2 s while searching, 5 s while locked)
-      │
-      ├─► [B] Anchor tracker: ORB + RANSAC on the rigid scene around the region
-      │          (every 15 frames) → region corners in the current frame
-      │
-      ├─► [C] Region motion: optical flow in the warped region → artifact check
-      │          → projection on the breathing axis → integrated displacement s(t)
-      │          → causal band-pass → displayed waveform y(t)
-      │
-      ├─► [D] Breath detection on y(t) → breath times → breath-to-breath rate
-      │
-      └─► [E] Rate (every 1 s, 15 s window): harmonic-weighted spectrum → HMM tracker
-                 → confidence from spectral quality + agreement + regularity
+```mermaid
+flowchart TD
+    F["Video frame, 1920×1080 at 30 fps → grayscale"]
+    A["<b>A · Localiser</b> (§3)<br/>whole-frame block motion → periodicity map → candidate region<br/><i>every 2nd frame; a proposal every 2 s while searching, 5 s while locked</i>"]
+    B["<b>B · Anchor tracker</b> (§4)<br/>ORB + RANSAC on the rigid scene around the region<br/><i>every 15 frames</i>"]
+    C["<b>C · Breathing waveform</b> (§5)<br/>optical flow in the region → artifact check → breathing axis<br/>→ integrated displacement s(t) → causal band-pass → y(t)"]
+    D["<b>D · Breath detection</b> (§6)<br/>peaks of y(t) → breath times → breath-to-breath rate"]
+    E["<b>E · Spectral rate</b> (§7)<br/><i>every 1 s, 15 s window</i>: harmonic salience → HMM tracker"]
+    K{"<b>Confidence</b><br/>spectral quality + agreement + regularity"}
+    R(["rate reported"])
+    W(["rate withheld"])
+    F --> A
+    F --> B
+    F --> C
+    A -->|region| B
+    B -->|region corners in the current frame| C
+    C -->|"y(t)"| D
+    C -->|"s(t)"| E
+    D -->|breath-to-breath rate, interval CV| K
+    E --> K
+    E -.->|f₀ steers the breathing axis| C
+    K -->|good / fair| R
+    K -->|poor / none| W
 ```
 
 Monitor states: `searching` (no region yet), `locked` (tracking, signal usable), `artifact`
 (tracking, but current samples rejected), and `lost` (scene changed; trying to re-acquire).
+
+```mermaid
+stateDiagram-v2
+    [*] --> searching
+    searching --> locked: localiser proposes a region (mean score ≥ 0.45)
+    locked --> artifact: motion above T, or registration failed
+    artifact --> locked: 0.5 s with neither
+    locked --> lost: registration failing for ≥ 3 s
+    artifact --> lost: registration failing for ≥ 3 s
+    lost --> locked: the old reference matches again (same region)
+    lost --> locked: localiser finds a region in ≥ 12 s of new data
+    locked --> locked: poor signal for over 20 s and a better region elsewhere
+```
+
+A region drawn by hand moves the monitor to `locked` from any state. Re-running
+auto-detection (key `A`) returns it to `searching`.
 
 ## 3. Stage A — automatic localisation of the breathing region
 
@@ -61,6 +87,13 @@ mouse's flank is small in amplitude but highly periodic. So the region is define
 *periodicity*, not by appearance. This means no detector has to be trained. A related principle,
 finding the respiratory region from the intrinsic properties of respiratory motion, was proposed
 for human video monitoring by Janssen et al. [[10](https://doi.org/10.1088/0967-3334/37/1/100)].
+
+![Animation of the first 24 seconds of Recording 3. Left: the video with an arrow for the motion of each block; the surgeon's hand produces large arrows. Right: after 12 seconds of history, the periodicity map appears and a green box marks a small region on the mouse at 46 breaths per minute. Below: the mouse block shows small, regular dips once per breath, while the glove block drifts irregularly by hundreds of pixels.](figures/A_localiser.webp)
+
+*Figure 1 (animation, 2× speed). Localisation on Recording 3, from the first frame. The
+surgeon's hand moves hundreds of pixels but not rhythmically, so it scores low. The mouse
+block moves a few pixels, once per breath. After the 12 s minimum history the map picks out the
+mouse, and the region (green) is locked.*
 
 **Block motion.** Every second frame (15 Hz), the frame is resized to 480 px wide (`INTER_AREA`;
 exactly ¼ of 1080p, which is ~100× faster than a non-integer ratio). Rows are cropped to a
@@ -83,6 +116,14 @@ The score is a spectral-concentration measure, close in spirit to the SNR used i
 pulse measurement [[14](https://doi.org/10.1109/TBME.2013.2266196)]. Because the denominator includes slow motion (0.1–0.5 Hz), blocks
 dominated by the surgeon score low.
 
+![A video frame from Recording 3 overlaid with the block grid and three marked blocks, and, for each block, its displacement over 20 seconds and its power spectrum. The mouse block shows regular sharp spikes, with spectral peaks at 46, 92 and 138 breaths per minute and a score of 0.80. The glove block moves by hundreds of pixels slowly, its power is below the search band, and it scores 0.03. The background block barely moves and falls below the noise floor.](figures/A1_block_periodicity.png)
+
+*Figure 2. The periodicity score for three blocks (Recording 3, window 0–20 s). Shaded bands:
+the ±0.08 Hz windows around f₀, 2f₀ and 3f₀ that make up the score's numerator. Grey: below
+the 30/min search band. The mouse block puts 80% of its power at the breathing rate and its
+harmonics. The glove block moves over 100× more, but slowly, so it scores 0.03. The background is
+removed by the absolute noise floor.*
+
 **Two pitfalls found on our data, and their fixes:**
 - *The surgeon breathes too.* The gown and hands move at the surgeon's breathing rate
   (12–20/min), and that region is far larger than the mouse. The search band therefore starts
@@ -98,6 +139,12 @@ component maximising mean score × √(number of blocks) wins: strong and cohere
 counting only weakly. It needs ≥3 blocks and a mean score ≥0.45. Its bounding box becomes the
 region.
 
+![Three panels. a: the periodicity score over the whole frame, high only in a small cluster beside the ear bar. b: zoomed in, the blocks above the threshold of 0.30; 19 connected blocks at 46 breaths per minute with mean score 0.66 are highlighted. c: the bounding box of that group, 128 by 256 pixels at full resolution.](figures/A2_region_selection.png)
+
+*Figure 3. From the score map to the region (Recording 3, t = 20 s). Here τ is at its 0.30
+floor. The winning group is 19 connected blocks sharing a rate of 46/min, on the mouse's back
+beside the ear bar.*
+
 **Schedule.** A proposal is attempted every 2 s while searching. While locked, the map is
 refreshed every 5 s (for the optional "Breathing map" overlay and for relocation). An
 automatically found region is replaced only if its confidence has been poor for >20 s and the
@@ -110,6 +157,14 @@ follow the breathing motion and remove exactly the signal we want. The mouse is 
 stereotaxic frame, so we instead register the *rigid scene around it* (ear bars, platform, tape)
 and carry the region along.
 
+![Two panels over 13 seconds of Recording 3. a: the vertical position of a window that follows the mouse by template matching jumps by about one pixel at every breath. b: the breathing waveform from the fixed region shows tall, sharp breaths; the waveform from the mouse-following window is less than half as large and distorted.](figures/B1_track_scene_not_mouse.png)
+
+*Figure 4. Why the region must not follow the mouse (Recording 3, 32–45 s). For this figure,
+a sub-pixel template tracker was run on the region. It does follow the mouse, but it does so by
+moving with every breath (a). The motion left inside its window is only 44% of the signal
+(standard deviation), and it is distorted (b). The fixed, scene-anchored region keeps the
+whole breath.*
+
 - ORB features [[2](https://doi.org/10.1109/ICCV.2011.6126544)] (up to 1500, FAST threshold 10) on a half-resolution frame. The region itself
   is masked out of the reference.
 - Every 15 frames (0.5 s): match current features to the reference (brute-force Hamming, k = 2,
@@ -118,6 +173,21 @@ and carry the region along.
   ≥25 inliers and scale in (0.8, 1.25).
 - When the transform updates, the *previous* region patch is re-sampled with the new transform.
   The tracking correction itself therefore never appears as motion.
+
+![Two panels from the synthetic test video. a: the reference frame with 1500 blue feature points on the scene around the region; the region itself is greyed out and contributes none. b: the frame just after a sudden camera bump; 675 of 785 feature matches agree on one transform, an arrow shows the region moved from its old position to the new one, and the estimated shift of minus 300, minus 150 pixels equals the shift applied to the video.](figures/B2_anchor_registration.png)
+
+*Figure 5. Registration across a sudden camera bump. This uses the synthetic test video: Recording 3
+footage shifted by a known (−300, −150) px at 90 s
+(`exploration/scripts/make_dynamic_video.py`). The region is masked out of the reference (a), so
+only the scene is matched. RANSAC keeps the 675 matches that agree, and the transform they
+give carries the region onto the mouse (b).*
+
+![Animation from the synthetic test video while the camera pans 500 pixels to the right. Blue feature points cover the scene, and the green region box moves with the scene and stays on the mouse. A side panel shows the region as the analysis sees it; it barely changes during the pan.](figures/B_anchor_tracking.webp)
+
+*Figure 6 (animation, 2× speed). A slow 500 px pan (synthetic test video, 150–160 s). The
+region (green) is updated every 15 frames from the matched scene features (blue). The patch the
+waveform is computed from (right) stays on the same part of the mouse throughout, and the
+monitor stays `locked`.*
 - **Re-keying.** Every 5 s, while tracking is good and the region is calm, the reference is
   refreshed from the current frame. New keypoints are mapped back through the inverse transform
   into the original reference coordinates, so the region does not drift (measured drift ≤3 px
@@ -141,6 +211,14 @@ auto-exposure (exploration figure 01). In a comparison of three extractors for c
 human respiration, optical flow also outperformed the intensity-based ones in all tested
 conditions [[16](https://doi.org/10.3390/s21155126)].
 
+![Animation, in real time, of 10 seconds of Recording 3. Left: the region on the mouse with blue optical-flow arrows that flare up at each breath. Middle: a dot tracing the region's two-dimensional displacement, moving back and forth along a near-vertical line, the breathing axis. Right: the integrated projection s(t) and the band-passed waveform y(t) scroll by, with an orange marker added to each breath once it is confirmed; the reported rate reads 47 to 48 breaths per minute, good confidence.](figures/C_waveform.webp)
+
+*Figure 7 (animation, real time). Stage C at work (Recording 3, 40–50 s). The region's flow
+(arrows, magnified 30×) is averaged into one 2-D motion per frame. Integrated, it moves back
+and forth along the breathing axis (middle). Its projection on the axis is s(t). Band-passed,
+it becomes the displayed waveform y(t), in which each breath is an upward peak and is marked
+once confirmed (§6).*
+
 **Artifact rejection.** A frame is an artifact if m<sub>t</sub> > T or the last registration
 failed; the flag is held for 0.5 s. During artifacts **v**<sub>t</sub> is set to zero (they are
 not integrated). The threshold is
@@ -151,6 +229,13 @@ It uses *all* frames, including flagged ones. Breaths therefore set the scale, a
 several times larger than a typical breath is rejected. An earlier version excluded flagged
 frames from the baseline. That threshold ratcheted down until it rejected the breaths
 themselves.
+
+![Three stacked panels over 50 seconds of Recording 2. a: the region's flow magnitude on a log scale, with a spike train for the breaths that stays under the threshold line at about 0.67 pixels per frame, and a burst above it between 209 and 220 seconds, shaded as artifact. b: the integrated displacement s(t) rises steadily with a step per breath and stays flat inside the shaded artifact spans. c: the displayed waveform with orange markers on breaths before and after the artifact and none inside it.](figures/C1_artifact_rejection.png)
+
+*Figure 8. Artifact rejection during a hand intrusion (Recording 2, 190–240 s). Breaths set the
+threshold T (≈0.67 px/frame here), so only motion several times larger than a breath is flagged
+(a). The intrusion reaches 4.3 px/frame. Flagged increments are not integrated, so s(t) holds
+still instead of jumping (b), and no breaths are taken from the flagged samples (c).*
 
 **Projection onto the breathing axis.** The 2-D motion is reduced to one signal:
 
@@ -170,11 +255,25 @@ detrended 2-D displacement D over the last 15 s:
 C is trace-normalised and smoothed (C ← 0.8·C + 0.2·C<sub>new</sub>), and the sign of **a** is
 kept consistent with its previous value.
 
+![Left: the region's 2-D displacement over 15 seconds, with two arrows for the candidate axes, 39 degrees apart: the axis steered to the breathing frequency is near vertical, and the broadband axis is tilted. Right: the projection on the steered axis shows clean, regular breaths with spectral quality 0.53; the projection on the broadband axis is mixed with slower motion and has spectral quality 0.34.](figures/C2_breathing_axis.png)
+
+*Figure 9. Steering the breathing axis (Recording 2, 451–466 s). Here slow motion rotates the
+broadband principal axis 39° away from the breathing direction. The axis steered to f₀ and its
+harmonics stays on the breathing. Its projection has spectral quality 0.53 ("good", Stage E).
+The broadband projection's 0.34 would fall below the 0.35 "fair" limit.*
+
 **Polarity.** Breaths are sharp and the pauses between them are slow, so the waveform is
 asymmetric. With α = ((q₉₉ − q₅₀) − (q₅₀ − q₁)) / (q₉₉ − q₁) of the band-passed projection, p is set
 so that α > 0, i.e. breaths point **up**. The first decision needs ≥6 s of signal and |α| > 0.1.
 A flip needs three consecutive 1-s checks with α·p < −0.15. Breath detection only runs once
 polarity is decided, and restarts from the moment of any flip.
+
+![Two panels of the same 6 seconds of Recording 3 with lines at the 1st, 50th and 99th percentiles. a: as first computed, the breaths are sharp downward spikes and the median sits near the top; alpha is minus 0.73. b: after choosing polarity minus one, the breaths are sharp upward peaks; alpha is plus 0.73.](figures/C3_polarity.png)
+
+*Figure 10. Choosing the polarity (Recording 3, the first 6 s after locking). Breaths are brief
+and the pauses long, so the median sits near the resting level. The spikes reach much further on
+one side, which gives α = −0.73. Setting p = −1 makes breaths point up (b), as in the GUI and
+for the peak detector.*
 
 **Displayed waveform.** y(t) = causal 2nd-order Butterworth band-pass (0.2–4 Hz) of s(t),
 applied sample by sample with stored filter state.
@@ -186,6 +285,13 @@ prominence ≥0.3 × (q₉₅ − q₅) of non-artifact samples, minimum distanc
 prominence window 2.5 s. A peak is confirmed once it is 0.35 s old, is not in an artifact, and
 comes ≥0.3 s after the previous breath. Confirmed breaths are final; they are written to
 `breaths.csv`.
+
+![Top: 15 seconds of the waveform from Recording 3 with lines at the 5th and 95th percentiles; each breath peak carries an orange bar for its prominence and a filled orange marker once confirmed, and the last 0.35 seconds are shaded as not yet confirmable. Bottom: the intervals between consecutive breaths lie close to their median of 1.30 seconds, which gives 46.2 breaths per minute with a coefficient of variation of 0.04.](figures/D1_breath_detection.png)
+
+*Figure 11. Breath detection on the last 15 s of y(t) (Recording 3, 285–300 s). Each breath
+clears the fixed prominence limit comfortably (orange bars). A peak in the last 0.35 s (shaded)
+is not confirmed yet. The breath-to-breath rate is 60 / median interval. The interval CV, here
+0.04, measures regularity for the confidence rule (§7).*
 
 These limits are deliberately **fixed** and not derived from the tracked rate. In an earlier
 version, the minimum peak distance was half the tracked period. When the spectral tracker
@@ -210,6 +316,13 @@ Every second, with ≥8 s of signal:
    harmonics. A plain harmonic sum, however, also rewards *sub*-harmonics: the candidate at f₀/3
    collects P(f₀) as its 3rd harmonic. Multiplying by the candidate's own power removes that
    failure, which we observed as false 13/min readings.
+
+   ![Three stacked spectra of the same 15-second window of Recording 2, from 15 to 140 breaths per minute. a: the power spectrum has a single peak at about 90 breaths per minute. b: the harmonic sum keeps that peak as the largest but adds large peaks at one third and one half of it. c: the salience keeps only the peak at about 90.](figures/E1_harmonic_salience.png)
+
+   *Figure 12. Why the salience is weighted (Recording 2, window ending at 60 s, about
+   90/min). The harmonic sum (b) builds strong false candidates at f₀/3 and f₀/2. On a
+   noisier window, these can overtake the true rate. The weighting by the candidate's own power
+   (c) removes them.*
 4. **Quality gate.** If the spectrum is not periodic (concentration at the argmax of Λ is
    < 0.3), the tracker is only propagated, not updated.
 5. **HMM tracking.** States: 25–200 breaths/min in 0.5 steps. Transition: Gaussian drift
@@ -217,6 +330,14 @@ Every second, with ≥8 s of signal:
    Emission: (Λ/max Λ)² + 0.02. Forward filtering only (causal); the estimate is the posterior
    mode. Temporal tracking of a spectral peak with an HMM follows pitch trackers such as pYIN
    [[13](https://doi.org/10.1109/ICASSP.2014.6853678)] and spectral tracking of heart rate from PPG [[15](https://doi.org/10.1109/TBME.2014.2359372)].
+
+   ![A heat map of the salience over the 10 minutes of Recording 2, from 25 to 130 breaths per minute, with an orange line for the reported rate that falls from about 90 to 47 breaths per minute along the brightest band; a fainter band at twice the rate runs above it. A strip underneath shows the confidence over time, mostly good with short fair, poor and none stretches.](figures/E2_rate_tracking.png)
+
+   *Figure 13. Tracking the rate over a whole session (Recording 2). Each column is the salience
+   Λ of one 1 s update, normalised. The HMM follows the fundamental as the rate falls from about
+   90 to 47/min. It is not pulled onto the second harmonic (the fainter band above) or onto
+   short disturbances. The rate is withheld at 216–227 s, after the hand intrusion of Figure 8,
+   until the window again holds 8 s of clean signal.*
 6. **Confidence.** SQI = spectral concentration at the estimate (±0.1 Hz, 3 harmonics, relative
    to 0.1–6 Hz), compared with the breath-to-breath rate from Stage D:
 
@@ -232,6 +353,14 @@ Every second, with ≥8 s of signal:
    rate from PPG; see Charlton et al. [[18](https://doi.org/10.1109/RBME.2017.2763681)] for a review of such estimators. The regularity
    condition stopped two estimators that happened to agree on noise from passing.
    The GUI keeps showing the last valid value, dimmed, for up to 15 s.
+
+   ![Five stacked panels over the 227 seconds of Recording 1. a: the spectral estimate, the breath-to-breath rate and the reported rate agree near 40 breaths per minute for most of the recording; near the end the spectral estimate drops to the 25 per minute floor and the reported rate stops. b, c and d: the spectral quality, the disagreement between the two estimates and the irregularity of breath intervals, each with its threshold lines. e: the resulting confidence strip, good and fair for most of the recording and poor where any rule fails.](figures/E3_confidence.png)
+
+   *Figure 14. The confidence rule over a difficult recording (Recording 1, hands near the
+   mouse throughout). A rate is reported (blue, 66% of the time) only when the spectrum is
+   periodic (b), the two estimators agree (c) and the breathing is regular (d). Near the end the
+   spectral tracker drops to the 25/min floor while breath counting stays near 40/min. That
+   disagreement withholds the rate rather than reporting a wrong one.*
 
 **Why the 25/min floor.** When the surgeon rests a hand on the frame, their own breathing
 (12–20/min) reaches the region. With a 15/min floor the tracker locked onto it in Recording 1.
