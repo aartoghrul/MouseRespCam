@@ -39,6 +39,8 @@ class FrameResult:
     state: str
     quad: np.ndarray | None          # ROI corners in full-res pixels
     y: float = np.nan                # display waveform sample (breaths = upward peaks)
+    disp: float = np.nan             # raw integrated motion along the breathing axis (ROI px)
+    flow: tuple = (np.nan, np.nan)   # mean optical flow in the region (full-resolution px/frame)
     artifact: bool = False
     breaths: list = field(default_factory=list)   # newly confirmed breaths [(t, y), ...]
     rate: RateEstimate | None = None
@@ -72,6 +74,7 @@ class RespirationMonitor:
         self.trk = AnchorTracker(p)
         self.hmm = RateTracker(*p.rate_bpm, sigma=p.hmm_sigma_bpm)
         self.bp = CausalBandpass(*p.display_band, fs=fps)
+        self.motion_sos = signal.butter(2, [0.2, min(5.0, 0.45 * fps)], 'band', fs=fps, output='sos')
         self.state = SEARCHING
         self.roi_source = None
         self.recovering = False
@@ -83,6 +86,8 @@ class RespirationMonitor:
         self.breath_log = []     # all confirmed breaths [(t, y)] since start
         self.prev_gray = None
         self.last_rekey = -np.inf
+        self.last_t = None
+        self.gaps = 0            # jumps in the timeline (a live source dropped frames to catch up)
         self._reset_signal()
 
     # ------------------------------------------------------------------ control
@@ -138,6 +143,11 @@ class RespirationMonitor:
         p, fps = self.p, self.fps
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY) if frame_bgr.ndim == 3 else frame_bgr
         res = FrameResult(t=t, state=self.state, quad=None)
+        if self.last_t is not None and t - self.last_t > 3 / fps:
+            # frames were dropped: the sample buffers assume even spacing, so restart them
+            self.gaps += 1
+            self._reset_signal()
+        self.last_t = t
 
         if self.idx % p.loc_stride == 0:
             self.loc.push(gray)
@@ -178,6 +188,7 @@ class RespirationMonitor:
             if self.prev_roi is not None and self.prev_roi.shape == roi.shape:
                 fl = cv2.calcOpticalFlowFarneback(self.prev_roi, roi, None, 0.5, 2, 9, 3, 5, 1.1, 0)
                 v = fl.reshape(-1, 2).mean(0)
+                res.flow = tuple(float(c) for c in v / self.roi_scale)
                 mag = float(np.sqrt((fl ** 2).sum(2)).mean())
                 # artifact = motion several times larger than a typical breath. The scale comes from the
                 # median per-second peak over the last minute, including flagged frames, so the
@@ -207,7 +218,7 @@ class RespirationMonitor:
                     res.breaths = self._detect_breaths(t)
             self.prev_roi = roi
             self.state = ARTIFACT if art else LOCKED
-            res.y, res.artifact = y, art
+            res.y, res.artifact, res.disp = y, art, self.s
 
         self.prev_gray = gray
         if t >= self.next_rate_t:
@@ -226,7 +237,7 @@ class RespirationMonitor:
         """Region resampled to a small fixed-size patch (area-averaged, then warped)."""
         q = self.trk.quad()
         x0, y0, x1, y1 = self.trk.box
-        s = max(0.25, self.p.roi_target_px / min(x1 - x0, y1 - y0))
+        s = self.roi_scale = max(0.25, self.p.roi_target_px / min(x1 - x0, y1 - y0))
         w, h = max(8, int((x1 - x0) * s)), max(8, int((y1 - y0) * s))
         H, W = gray.shape
         bx0, by0 = np.clip(np.floor(q.min(0)).astype(int) - 2, 0, [W - 1, H - 1])
@@ -258,7 +269,7 @@ class RespirationMonitor:
                 sel |= np.abs(f - k * f0) < 0.08
             C = np.real(X[sel].conj().T @ X[sel])
         else:                         # no trusted rate yet: broadband breathing band
-            C = np.cov(signal.sosfiltfilt(signal.butter(2, [0.2, 5], 'band', fs=fps, output='sos'), D, axis=0).T)
+            C = np.cov(signal.sosfiltfilt(self.motion_sos, D, axis=0).T)
         C = C / (np.trace(C) + 1e-12)
         self.cov = C if self.cov is None else 0.8 * self.cov + 0.2 * C
         w, V = np.linalg.eigh(self.cov)
@@ -269,7 +280,7 @@ class RespirationMonitor:
         if len(self.inc) < 6 * fps:
             return
         # asymmetry: sharp breath spikes reach much further from the median than the slow phase
-        z = signal.sosfiltfilt(signal.butter(2, [0.2, 5], 'band', fs=fps, output='sos'), D, axis=0) @ a
+        z = signal.sosfiltfilt(self.motion_sos, D, axis=0) @ a
         lo, med, hi = np.percentile(z, [1, 50, 99])
         asym = ((hi - med) - (med - lo)) / (hi - lo + 1e-12)     # >0: spikes point up
         if not self.polarity_set:

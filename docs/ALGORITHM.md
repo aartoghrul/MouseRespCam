@@ -29,7 +29,10 @@ institutional guidance targets about 55–100 [[21](https://az.research.umich.ed
 Design goals:
 1. **Hands-off.** No markers and no mandatory user input; the user may override the region.
 2. **Causal and real-time.** Every step uses only past frames, so recorded video (replayed in
-   simulated real time) and a live camera go through identical code.
+   simulated real time) and a live camera go through identical code. Because the rate is computed
+   from a fixed sample rate, a live camera is resampled onto a uniform time grid at its *measured*
+   frame rate (driver-reported rates are often wrong, and webcams slow down in dim light); see
+   `source.py`.
 3. **Honest.** When the rate cannot be trusted, the system withholds it instead of reporting a
    wrong number.
 

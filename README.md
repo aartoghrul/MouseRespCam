@@ -15,6 +15,9 @@ yourself, and reports the breathing rate only when it can be trusted.
 ```bash
 uv venv -p python3.12 .venv && uv pip install -p .venv/bin/python -e .
 
+# GUI: opens ready to record; press the red Record button to start the live camera
+.venv/bin/python -m surgeryvitals
+
 # GUI: replay a recording in simulated real time (speed adjustable in the toolbar)
 .venv/bin/python -m surgeryvitals videos/Recording_3.mp4
 
@@ -22,7 +25,45 @@ uv venv -p python3.12 .venv && uv pip install -p .venv/bin/python -e .
 .venv/bin/python -m surgeryvitals videos/Recording_3.mp4 --headless --plot exploration/summary.png
 ```
 
+On Windows use `.venv\Scripts\python` instead of `.venv/bin/python`.
+
 The window sizes itself to the screen it opens on (fonts and panels scale with the screen).
+
+## Live camera
+
+```bash
+.venv/bin/python -m surgeryvitals --list-cameras                  # index and name of each camera
+.venv/bin/python -m surgeryvitals --camera 1                      # GUI with camera 1 selected
+.venv/bin/python -m surgeryvitals --camera --headless --name M12  # print the rate every 5 s; Ctrl+C stops and saves
+.venv/bin/python -m surgeryvitals --camera --camera-size 1280x720 --max-fps 15   # lighter load
+```
+
+Any USB or built-in webcam should work on macOS, Windows and Linux, with no configuration:
+
+- **Frame rate is measured, not trusted.** Drivers often report the wrong rate (the MacBook camera
+  reports 15 fps and delivers 30), and webcams slow down in dim light. The rate in breaths/min
+  depends directly on the frame rate, so the camera is resampled onto an even time grid at its
+  measured rate. Tested against the recorded videos with jitter, a misreported rate and a
+  15 fps dim-light drop: live rates match the offline ones (median difference 0.0 /min).
+- **Processing rate fits the machine.** Start-up measures the cost per frame and lowers the
+  processing rate (30 → 15 fps) if needed. If processing still falls behind, the backlog is
+  dropped and the waveform restarts. The *Processing* row shows the load and these gaps.
+- **Camera choice.** The capture backend is picked per platform (AVFoundation on macOS; DirectShow,
+  then Media Foundation, on Windows; V4L2 on Linux). Full HD is requested as MJPG, and the camera
+  falls back to its nearest mode.
+- **macOS permission.** The first run asks for camera access for the app you started from
+  (Terminal, iTerm, VS Code…). If it was denied, allow it in *System Settings → Privacy & Security
+  → Camera* and restart that app.
+- Nothing is recorded until you press **Record**. A live session is saved to
+  `results/<session name or camera N>_<date>-<time>/` when you press *Stop* or close the window.
+  Footage is written while recording.
+
+**Settings** (sliders icon, `⌘,`): camera (choose one when several are attached), resolution,
+processing rate, results folder, a session name such as an animal ID, and which outputs to save
+(see [Outputs](#outputs)). *Use for this session* keeps the choice until the program closes;
+*Save as default* loads it every time the program starts; *Restore built-in defaults* resets the
+form. Settings cannot be changed while recording (stop first). Headless runs use `--out`, `--name`
+and `--footage off|half|full` instead.
 
 ## Reading the GUI
 
@@ -33,8 +74,13 @@ The window sizes itself to the screen it opens on (fonts and panels scale with t
 | **Breathing motion** | The last 20 s of the motion waveform. Each upward peak is one breath (orange marker), with vertical lines every second so you can count by hand. Grey segments are artifacts. |
 | **Respiratory rate since start** | The full trend, breath-to-breath points, and a confidence strip (good / fair / poor / searching). |
 
-Keys: `Space` play/pause, `A` re-run auto-detection, `R` draw the region by hand, `Esc` cancel
-drawing, `⌘O` open a recording.
+Toolbar (hover for a description): open a recording · **record / stop** the live camera |
+play/pause/replay and playback speed (only shown for a recording) | auto-detect region · draw
+region · breathing map | open the results folder · settings. After each session the saved folder
+is also linked under the rate.
+
+Keys: `Space` stops a live recording, or plays/pauses a recording, `A` re-run auto-detection, `R` draw the region by hand, `Esc` cancel
+drawing, `⌘O` (`Ctrl+O` on Windows) open a recording, `⌘,` settings.
 
 ## How it works (summary)
 
@@ -53,14 +99,20 @@ drawing, `⌘O` open a recording.
 Full details, parameters, design decisions, rejected alternatives and references:
 **[docs/ALGORITHM.md](docs/ALGORITHM.md)**.
 
-## Outputs (`results/<recording>/`)
+## Outputs
+
+One folder per session: `results/<recording name>/`, or `results/<session name>_<date>-<time>/` for a
+live camera. Each file can be switched off in Settings except `session.json`.
 
 | File | Content |
 |---|---|
 | `rate.csv` | Per second: reported rate, confidence, signal quality, breath-to-breath rate, raw tracker value, monitor state |
 | `breaths.csv` | Time of every detected breath, for comparison with ground truth |
+| `motion.csv` | Per frame: displayed waveform, raw displacement along the breathing axis, raw mean optical flow of the region (full-resolution px/frame), artifact flag, state |
 | `roi.csv` | Tracked region over time |
-| `signal.npz` | Displayed waveform at frame rate, plus artifact flags |
+| `summary.png` | Summary figure of the session |
+| `footage.mp4` | Live sessions: the camera footage (half resolution by default, ≈ 1.3 GB/hour; full ≈ 5 GB/hour). These are the evenly resampled frames that were analysed, so opening the file gives the same analysis. At half resolution, rates matched full resolution within 0.5 /min |
+| `session.json` | Start time, camera, frame rates, gaps, save options and all algorithm parameters |
 
 ## Project layout
 
@@ -71,8 +123,8 @@ src/surgeryvitals/
   tracker.py    anchor tracking of the region (ORB + RANSAC, re-keying)
   monitor.py    per-frame pipeline: signal, artifacts, breaths, rate, confidence, states
   dsp.py        spectra, harmonic salience, causal filter, HMM rate tracker
-  source.py     video input (recorded video; a live camera goes here)
-  recorder.py   result accumulation and export
+  source.py     video input: recorded video, and live cameras (resampled to an even time grid)
+  recorder.py   result accumulation, saving, and footage writing
   gui.py        PySide6 / pyqtgraph monitor
   report.py     static summary figure
 docs/ALGORITHM.md   method description and references
@@ -85,7 +137,8 @@ exploration/        analysis figures and scripts from the design phase
 - A true rate below 25 breaths/min is shown as withheld rather than as a number. An
   apnoea/bradypnoea alarm is planned.
 - It needs about 15 s of visible breathing to find the region, at start-up and after the camera moves.
-- Live-camera input is not wired up yet.
+- Live capture has been tested on macOS (built-in camera) and with simulated cameras. It has not
+  yet been run on Windows hardware.
 - Accuracy has not been measured against a reference.
 
 ## Acknowledgements

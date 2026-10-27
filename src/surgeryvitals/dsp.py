@@ -46,7 +46,7 @@ class CausalBandpass:
     """Sample-by-sample Butterworth band-pass (for the live waveform)."""
 
     def __init__(self, lo, hi, fs, order=2):
-        self.sos = signal.butter(order, [lo, hi], 'band', fs=fs, output='sos')
+        self.sos = signal.butter(order, [lo, min(hi, 0.45 * fs)], 'band', fs=fs, output='sos')
         self.zi = None
 
     def reset(self):
