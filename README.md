@@ -158,6 +158,6 @@ related to earlier camera-based monitoring of rodents
 region-of-interest detection in humans
 ([Janssen et al. 2016](https://doi.org/10.1088/0967-3334/37/1/100)). Facemap's motion SVD
 ([Syeda et al. 2024](https://doi.org/10.1038/s41593-023-01490-6)) informed the exploration. It is
-built with OpenCV, [NumPy](https://doi.org/10.1038/s41586-020-2649-2),
-[SciPy](https://doi.org/10.1038/s41592-019-0686-2), PySide6, pyqtgraph and matplotlib. Full
+built with [OpenCV](https://opencv.org/), [NumPy](https://doi.org/10.1038/s41586-020-2649-2),
+[SciPy](https://doi.org/10.1038/s41592-019-0686-2), [PySide6](https://pypi.org/project/PySide6/), pyqtgraph and matplotlib. Full
 citations are in [docs/ALGORITHM.md](docs/ALGORITHM.md#references).
